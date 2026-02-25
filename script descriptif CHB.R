@@ -154,6 +154,19 @@ data_CHB_BBE <- data_CHB_BBE |>
     TRUE ~ "Other"
   ))
 
+#Création variable graft_surv_years en divisant graft_surv_days par 365.25
+data_CHB_BBE <- data_CHB_BBE %>%
+  mutate(graft_surv_years = graft_surv_days / 365.25)
+
+#Nouvelle variable graft_event à partir de tfl_graft_status
+# graft_event = 1 si tfl_graft_status = DCD ou ARF, graft_event = 0 si tfl_graft_status = GRF
+data_CHB_BBE <- data_CHB_BBE %>%
+  mutate(graft_event = case_when(
+    tfl_graft_status_x %in% c("DCD", "ARF") ~ 1,
+    tfl_graft_status_x == "GRF" ~ 0,
+    TRUE ~ NA_real_
+  ))
+
 #----- Squvegarde du dataset final ------
 save(data_CHB_BBE, file = "data_CHB_BBE.RData")
 
@@ -267,5 +280,6 @@ ggplot(data_CHB_BBE, aes(x = tx_period, fill = rec_age_grp)) +
   theme_minimal()
 ggsave("recipient_age_by_period_percentage.png", width = 10, height = 6)
 
+summary(data_CHB_BBE$tfl_graft_status_x)
 
 # ----- Fin du script -----

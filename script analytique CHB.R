@@ -370,3 +370,68 @@ print(km_plot_bb_pos_graft_5yrs)
 ggsave("km_graft_survival_plot_bb_vs_pos_control_5yrs.png", plot = km_plot_bb_pos_graft_5yrs$plot, width = 8, height = 6)
 # Sauvegarde du tableau des risques
 ggsave("km_graft_survival_risk_table_bb_vs_pos_control_5yrs.png", plot = km_plot_bb_pos_graft_5yrs$table, width = 8, height = 4)
+
+
+#-----Barchart probabilité de survie des greffons dans les 3 groupes à 5 ans-----
+km_fit_graft_surv <- survfit(
+  Surv(graft_surv_years, graft_event) ~ Group,
+  data = comparison_data
+)
+
+s5 <- summary(km_fit_graft_surv, times = 5)
+
+graft_survival_5yrs_df <- data.frame(
+  Group = gsub("Group=", "", s5$strata),
+  Survival_Probability_5yrs = s5$surv,
+  lower = s5$lower,
+  upper = s5$upper
+)
+
+# Optionnel mais recommandé
+graft_survival_5yrs_df$Group <- factor(
+  graft_survival_5yrs_df$Group,
+  levels = c("BB group", "Positive control", "Negative control")
+)
+
+logrank <- survdiff(
+  Surv(graft_surv_years, graft_event) ~ Group,
+  data = comparison_data
+)
+
+pval <- pchisq(logrank$chisq,
+               df = length(logrank$n) - 1,
+               lower.tail = FALSE)
+
+# Création du barchart avec ggplot2
+ggplot(
+  graft_survival_5yrs_df,
+  aes(x = Group, y = Survival_Probability_5yrs, fill = Group)
+) +
+  geom_col(width = 0.6) +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper),
+    width = 0.15
+  ) +
+  scale_fill_manual(
+    values = c(
+      "BB group" = "#2e15d1",
+      "Positive control" = "#15D12E",
+      "Negative control" = "#d12e15"
+    )
+  ) +
+  annotate(
+    "text",
+    x = 2,
+    y = max(graft_survival_5yrs_df$upper) + 0.05,
+    label = paste0("Log-rank p = ", signif(pval, 10))
+  ) +
+  labs(
+    x = "Group",
+    y = "Graft survival probability at 5 years",
+    title = "Graft survival probability at 5 years"
+  ) +
+  theme_minimal()
+
+# Sauvegarde du graphique
+ggsave("graft_survival_5yrs_barchart.png", width = 8, height = 6)
+
