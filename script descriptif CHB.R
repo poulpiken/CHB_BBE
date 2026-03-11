@@ -5,6 +5,7 @@
 library(broom)
 library(dplyr)
 library(forcats)
+library(forestplot)
 library(ggplot2)
 library(ggpubr)
 library(gtsummary)
@@ -14,9 +15,11 @@ library(lubridate)
 library(paletteer)
 library(purrr)
 library(readxl)
+library(splines)
 library(stringr)
 library(survival)
 library(survminer)
+library(tibble)
 library(tidyr)
 library(janitor)
 
@@ -128,7 +131,7 @@ data_CHB_BBE$rec_age_grp <- factor(
   levels = rev(levels(data_CHB_BBE$rec_age_grp))
 )
 
-#Renommer les valeurs de CAN_GENDER et DON_GENDER dans l'affichage 
+#Renommer les valeurs de rec_gender et don_gender dans l'affichage 
 #F = Women et M = Men
 data_CHB_BBE <- data_CHB_BBE |> 
   mutate(rec_gender = case_when(
@@ -167,10 +170,8 @@ data_CHB_BBE <- data_CHB_BBE %>%
     TRUE ~ NA_real_
   ))
 
-#----- Squvegarde du dataset final ------
+#----- Sauvegarde du dataset final ------
 save(data_CHB_BBE, file = "data_CHB_BBE.RData")
-
-#----- Données sur les groupes d'âge des donneurs et des receveurs -----
 
 #Tableau des groupes d'âge des donneurs et des receveurs en nombre et pourcentage
 table_age_groups <- data_CHB_BBE %>%
@@ -280,6 +281,6 @@ ggplot(data_CHB_BBE, aes(x = tx_period, fill = rec_age_grp)) +
   theme_minimal()
 ggsave("recipient_age_by_period_percentage.png", width = 10, height = 6)
 
-summary(data_CHB_BBE$tfl_graft_status_x)
 
 # ----- Fin du script -----
+

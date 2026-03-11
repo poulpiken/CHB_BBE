@@ -1,28 +1,6 @@
 #----- Script analytique -----
 # Ce script identifie les trois groupes d'intérêt BB, contrôle positif et contrôle négatif et les compare
 
-#----- Chargement des packages nécessaires -----
-
-library(broom)
-library(dplyr)
-library(forcats)
-library(forestplot)
-library(ggalluvial)
-library(ggplot2)
-library(ggpubr)
-library(gtsummary)
-library(gt)
-library(haven)
-library(lubridate)
-library(paletteer)
-library(purrr)
-library(readxl)
-library(splines)
-library(stringr)
-library(survival)
-library(survminer)
-library(tibble)
-library(tidyr)
 
 #----- Création des 3 groupes d'intérêt -----
 
@@ -236,7 +214,7 @@ bb_neg_ctrl_data_graft <- bb_neg_ctrl_data_graft %>%
     )
   )
 #Kaplan Meier plot sur graft_surv_years
-km_fit_bb_neg_graft <- survfit(Surv(graft_surv_years, graft event) ~ Group, data = bb_neg_ctrl_data_graft)
+km_fit_bb_neg_graft <- survfit(Surv(graft_surv_years, graft_event) ~ Group, data = bb_neg_ctrl_data_graft)
 km_plot_bb_neg_graft <- ggsurvplot(
   km_fit_bb_neg_graft,
   data = bb_neg_ctrl_data_graft,
@@ -435,3 +413,52 @@ ggplot(
 # Sauvegarde du graphique
 ggsave("graft_survival_5yrs_barchart.png", width = 8, height = 6)
 
+#----- Barchart probabilité de survie des greffons dans les 3 groupes à 10 ans -----
+s10 <- summary(km_fit_graft_surv, times = 10)
+graft_survival_10yrs_df <- data.frame(
+  Group = gsub("Group=", "", s10$strata),
+  Survival_Probability_10yrs = s10$surv,
+  lower = s10$lower,
+  upper = s10$upper
+)
+# Optionnel mais recommandé
+graft_survival_10yrs_df$Group <- factor(
+  graft_survival_10yrs_df$Group,
+  levels = c("BB group", "Positive control", "Negative control"),
+  labels = c("BB group", "Positive control", "Negative control"),
+  ordered = TRUE,
+  levels = c("BB group", "Positive control", "Negative control"),
+  exclude = NULL
+)
+logrank_10yrs <- survdiff(
+  Surv(graft_surv_years, graft_event) ~ Group,
+  data = comparison_data
+)
+pval_10yrs <- pchisq(logrank_10yrs$chisq,
+                        df = length(logrank_10yrs$n) - 1,
+                        lower.tail = FALSE)
+# Création du barchart avec ggplot2
+ggplot(
+  graft_survival_10yrs_df,
+  aes(x = Group, y = Survival_Probability_10yrs, fill = Group)) +
+  geom_col(width = 0.6) + 
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.15) +
+  scale_fill_manual(values = c(
+    "BB group" = "#2e15d1",
+    "Positive control" = "#15D12E",
+    "Negative control" = "#d12e15"
+  )) +
+  annotate(
+    "text",
+    x = 2,
+    y = max(graft_survival_10yrs_df$upper) + 0.05,
+    label = paste0("Log-rank p = ", signif(pval_10yrs, 10))
+  ) +
+  labs(
+    x = "Group",
+    y = "Graft survival probability at 10 years",
+    title = "Graft survival probability at 10 years"
+  ) +
+  theme_minimal()
+# Sauvegarde du graphique
+ggsave("graft_survival_10yrs_barchart.png", width = 8, height = 6)
