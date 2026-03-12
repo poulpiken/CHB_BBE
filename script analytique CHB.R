@@ -462,3 +462,4 @@ ggplot(
   theme_minimal()
 # Sauvegarde du graphique
 ggsave("graft_survival_10yrs_barchart.png", width = 8, height = 6)
+

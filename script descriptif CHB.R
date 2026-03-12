@@ -27,8 +27,10 @@ library(janitor)
 
 data_source <- read_excel("data CHB BBE.xlsx", sheet = 1, n_max = 3891)
 age_data <- read_excel("data CHB BBE.xlsx", sheet = 2, n_max = 3891)
+biopsy_data <- read_excel("Data biopsies CHB.xlsx", sheet = 1, n_max = 7606)
 
-#----- Fusion des datasets selon les colonnes communes REC_TX_DT, TFL_LASTUPDATE et REC_AGE_AT_TX -----
+#----- Fusion des datasets -----
+#Fusion data_source et age_data selon les colonnes communes REC_TX_DT, TFL_LASTUPDATE et REC_AGE_AT_TX
 age_data <- age_data %>%
   mutate(
     REC_TX_DT = as.Date(REC_TX_DT),
@@ -43,27 +45,58 @@ data_source <- data_source %>%
     REC_AGE_AT_TX = as.numeric(REC_AGE_AT_TX)
   )
 
-data_CHB_BBE <- left_join(
+data_CHB_source_age <- left_join(
   data_source,
   age_data,
   by = c("REC_TX_DT", "TFL_LASTUPDATE", "REC_AGE_AT_TX")
 )
 
-#----- Création d'une colonne d'identification TX_ID -----
+#Fusion data_CHB_BBE et biopsy_data selon les colonnes communes NOM, PRENOM et REC_BIRTH_DT
+biopsy_data <- biopsy_data %>%
+  mutate(
+    NOM = toupper(trimws(NOM)),
+    PRENOM = toupper(trimws(PRENOM)),
+    REC_BIRTH_DT = as.Date(as.numeric(REC_BIRTH_DT), origin = "1899-12-30")
+    )
+data_CHB_source_age <- data_CHB_source_age %>%
+  mutate(
+    NOM = toupper(trimws(NOM)),
+    PRENOM = toupper(trimws(PRENOM)),
+    REC_BIRTH_DT = as.Date(REC_BIRTH_DT)
+  )
 
-data_CHB_BBE <- data_CHB_BBE %>%
-  arrange(REC_TX_DT, TFL_LASTUPDATE, REC_AGE_AT_TX) %>%
-  mutate(TX_ID = row_number())
+biopsy_data_filtered <- biopsy_data %>%
+  semi_join(
+    data_CHB_source_age,
+    by = c("NOM", "PRENOM", "REC_BIRTH_DT")
+  )
 
-#----- Sélection et mise en forme des données -----
+data_CHB_BBE <- data_CHB_source_age %>%
+  left_join(
+    biopsy_data_filtered,
+    by = c("NOM", "PRENOM", "REC_BIRTH_DT"),
+    relationship = "many-to-many"
+  )
 
 data_CHB_BBE <- data_CHB_BBE %>%
   janitor::clean_names()
 
+#----- Création d'une colonne d'identification TX_ID -----
+
+data_CHB_BBE <- data_CHB_BBE %>%
+  group_by(nom, prenom, rec_birth_dt) %>%
+  mutate(tx_id = cur_group_id()) %>%
+  ungroup()
+
+#----- Sélection et mise en forme des données -----
+
 data_CHB_BBE <- data_CHB_BBE %>%
   select(tx_id, rec_tx_dt, tfl_lastupdate, rec_age_at_tx, don_age, graft_surv_days, tfl_graft_status_x,
          graft_failure, rec_gender, rec_birth_dt, mult_tx, rec_hgt_cm, rec_wgt_kg, bmi, graft_cumulated_age,
-    don_gender, don_hgt_cm, don_wgt_kg, don_cod)
+    don_gender, don_hgt_cm, don_wgt_kg, don_cod, biopsy_dt, biopsy_number, subnormal, steatosis, steatose_q, fibrosis, 
+    cirrhosis, ductopenia, ducto_count, endothelitis, steatofibrosis, hnr, mvo, hep_art_thrombosis, normal_liver_function,
+    rejection, chronic_rejection, acute_rejection, auto_immune, chronic_hepatitis, lobular_hepatitis, vhe,
+    biliary_obstacle, sinusoide_atteinte, banff)
 
 #exclure les patients multitransplantés mult_tx = O
 data_CHB_BBE <- data_CHB_BBE %>%
