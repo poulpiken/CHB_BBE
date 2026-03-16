@@ -98,6 +98,8 @@ data_CHB_BBE <- data_CHB_BBE %>%
     rejection, chronic_rejection, acute_rejection, auto_immune, chronic_hepatitis, lobular_hepatitis, vhe,
     biliary_obstacle, sinusoide_atteinte, banff)
 
+data_CHB_BBE$biopsy_dt <- as.Date(data_CHB_BBE$biopsy_dt)
+
 #exclure les patients multitransplantés mult_tx = O
 data_CHB_BBE <- data_CHB_BBE %>%
   filter(mult_tx == "N")
@@ -109,6 +111,36 @@ data_CHB_BBE <- data_CHB_BBE %>%
 #exclure les patients < 18 ans
 data_CHB_BBE <- data_CHB_BBE %>%
   filter(rec_age_at_tx >= 18)
+
+#Fusion des données de biopsies pour avoir une seule ligne par patient
+patient_data <- data_CHB_BBE %>%
+  select(
+    tx_id, rec_tx_dt, tfl_lastupdate, rec_age_at_tx, don_age, graft_surv_days, tfl_graft_status_x,
+    graft_failure, rec_gender, rec_birth_dt, mult_tx, rec_hgt_cm, rec_wgt_kg, bmi, graft_cumulated_age,
+    don_gender, don_hgt_cm, don_wgt_kg, don_cod
+  ) %>%
+  distinct(tx_id, .keep_all = TRUE)
+
+biopsy_data <- data_CHB_BBE %>%
+  select(-rec_tx_dt, -tfl_lastupdate, -rec_age_at_tx, -don_age, -graft_surv_days,
+         -tfl_graft_status_x, -graft_failure, -rec_gender, -rec_birth_dt,
+         -mult_tx, -rec_hgt_cm, -rec_wgt_kg, -bmi, -graft_cumulated_age,
+         -don_gender, -don_hgt_cm, -don_wgt_kg, -don_cod) %>%
+  arrange(tx_id, biopsy_dt) %>%
+  group_by(tx_id) %>%
+  mutate(biopsy_number = row_number()) %>%
+  ungroup()
+
+biopsy_wide <- biopsy_data %>%
+  pivot_wider(
+    id_cols = tx_id,
+    names_from = biopsy_number,
+    values_from = -c(tx_id, biopsy_number),
+    names_glue = "{.value}_bx{biopsy_number}"
+  )
+
+data_CHB_BBE <- patient_data %>%
+  left_join(biopsy_wide, by = "tx_id")
 
 #Division du dataset en période de 4 ans
 data_CHB_BBE <- data_CHB_BBE %>%
