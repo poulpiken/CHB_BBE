@@ -3,18 +3,24 @@
 #----- Chargement des packages nécessaires -----
 
 library(broom)
+library(cobalt)
+library(cmprsk)
 library(dplyr)
 library(forcats)
 library(forestplot)
 library(ggplot2)
 library(ggpubr)
 library(ggsignif)
+library(gridExtra)
 library(gtsummary)
 library(gt)
 library(haven)
 library(janitor)
 library(lubridate)
+library(MatchThem)
+library(mice)
 library(paletteer)
+library(patchwork)
 library(purrr)
 library(readxl)
 library(scales)
@@ -24,6 +30,7 @@ library(survival)
 library(survminer)
 library(tibble)
 library(tidyr)
+library(webshot2)
 library(writexl)
 
 #----- Importation du dataset -----
@@ -238,10 +245,10 @@ data_CHB_BBE <- data_CHB_BBE %>%
     TRUE ~ NA_real_
   ))
 
+
 #Renommer la variable bmi en rec_bmi
 data_CHB_BBE <- data_CHB_BBE %>%
   rename(rec_bmi = bmi)
-
 
 #Créer une variable don_bmi à partir de don_wgt_kg et don_hgt_cm
 data_CHB_BBE <- data_CHB_BBE %>%
