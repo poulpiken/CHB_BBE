@@ -2,169 +2,7 @@
 # Ce script identifie les trois groupes d'intérêt BB, contrôle positif et contrôle négatif et les compare
 
 
-#----- Création des 3 groupes d'intérêt -----
-
-# Groupe BB contient les very old donor ayant donné aux very young recipient et young recipient
-BB_group <- data_CHB_BBE %>%
-  filter((don_age >= 70 & rec_age_at_tx < 20) | (don_age >= 70 & rec_age_at_tx >= 20 & rec_age_at_tx < 40))
-BB_group1 <- data_CHB_BBE %>%
-  filter(don_age >= 70 & rec_age_at_tx < 20)
-BB_group2 <- data_CHB_BBE %>%
-  filter(don_age >= 70 & rec_age_at_tx >= 20 & rec_age_at_tx < 40)
-
-# Groupe contrôle positif contient les very young donor ayant donné aux very young recipient et young recipient
-pos_ctrl_group <- data_CHB_BBE %>%
-  filter((don_age < 20 & rec_age_at_tx < 20) | (don_age < 20 & rec_age_at_tx >= 20 & rec_age_at_tx < 40))
-pos_ctrl_group1 <- data_CHB_BBE %>%
-  filter(don_age < 20 & rec_age_at_tx < 20)
-pos_ctrl_group2 <- data_CHB_BBE %>%
-  filter(don_age < 20 & rec_age_at_tx >= 20 & rec_age_at_tx < 40)
-
-# Groupe contrôle négatif contient les very old donor ayant donné aux very old recipient et old recipient
-neg_ctrl_group <- data_CHB_BBE %>%
-  filter((don_age >= 70 & rec_age_at_tx >= 70) | (don_age >= 70 & rec_age_at_tx >= 60 & rec_age_at_tx < 70))
-neg_ctrl_group1 <- data_CHB_BBE %>%
-  filter(don_age >= 70 & rec_age_at_tx >= 70)
-neg_ctrl_group2 <- data_CHB_BBE %>%
-  filter(don_age >= 70 & rec_age_at_tx >= 60 & rec_age_at_tx < 70)
-
-#----- Table 1 de nos groupes d'intérêt -----
-#Faire un tableau descriptif des variables rec_age_at_tx, don_age, rec_gender, don_gender, don_cod, rec_hgt_cm, 
-#rec_wgt_kg, don_hgt_cm, don_wgt_kg
-#sur l'effectif total et les trois groupes d'intérêt BB group, Negative control et Positive control avec une
-#comparaison entre les 3 groupes et une pvalue sur la colonnes la plus à droite
-
-table1 <- bind_rows(
-  BB_group       %>% mutate(Group = "BB group"),
-  pos_ctrl_group %>% mutate(Group = "Positive control"),
-  neg_ctrl_group %>% mutate(Group = "Negative control"),
-  data_CHB_BBE %>% mutate(Group = "All patients")
-) %>%
-  mutate(
-    Group = factor(
-      Group,
-      levels = c(
-        "BB group",
-        "Positive control",
-        "Negative control",
-        "All patients"
-      )
-    )
-  ) %>%
-  select(
-    Group,
-    rec_age_at_tx, don_age, rec_gender, don_gender, don_cod, rec_hgt_cm, rec_wgt_kg, don_hgt_cm, don_wgt_kg
-  ) %>%
-  tbl_summary(
-    by = Group,
-    missing = "no",
-    statistic = list(
-      all_continuous() ~ "{median}",
-      all_categorical() ~ "{n} ({p}%)"
-    ),
-    digits = all_continuous() ~ 0,
-    label = list(
-      rec_age_at_tx ~ "Recipient age at transplant",
-      rec_gender ~ "Recipient gender",
-      rec_hgt_cm ~ "Recipient height in cm",
-      rec_wgt_kg ~ "Recipient weight in kg",
-      don_age ~ "Donor age",
-      don_gender ~ "Donor gender",
-      don_hgt_cm ~ "Donor height in cm",
-      don_wgt_kg ~ "Donor weight in kg",
-      don_cod ~ "Cause of donor death"
-    )
-  ) %>%
-  add_p() %>%
-  modify_header(label = "**Variable**") %>%
-  modify_spanning_header(
-    all_stat_cols() ~ "**Group**"
-  )
-# Affichage du tableau
-table1_gt <- as_gt(table1)
-print(table1_gt)
-
-#----- Comparaison des groupes d'intérêt -----
-comparison_data <- bind_rows(
-  BB_group1       %>% mutate(Group = "Very old donor -> Very young recipient"),
-  BB_group2       %>% mutate(Group = "Very old donor -> Young recipient"),
-  pos_ctrl_group1 %>% mutate(Group = "Very young donor -> Very young recipient"),
-  pos_ctrl_group2 %>% mutate(Group = "Very young donor -> Young recipient"),
-  neg_ctrl_group1 %>% mutate(Group = "Very old donor -> Very old recipient"),
-  neg_ctrl_group2 %>% mutate(Group = "Very old donor -> Old recipient")
-)
-
-# Calcul médiane et quartiles des durées graft_surv_years pour les 3 groupes
-summary_df <- comparison_data %>%
-  group_by(Group) %>%
-  summarise(
-    median = median(graft_surv_years, na.rm = TRUE),
-    q1     = quantile(graft_surv_years, 0.25, na.rm = TRUE),
-    q3     = quantile(graft_surv_years, 0.75, na.rm = TRUE),
-    .groups = "drop"
-  )
-summary_df$Group <- factor(
-  summary_df$Group,
-  levels = c("Very young donor -> Young recipient", "Very young donor -> Very young recipient", "Very old donor -> Old recipient", "Very old donor -> Very old recipient", "Very old donor -> Young recipient", "Very old donor -> Very young recipient")
-)
-
-# Forest plot
-ggplot(summary_df, aes(x = median, y = Group, color = Group)) +
-  geom_point(size = 3) +
-  geom_errorbar(
-    aes(xmin = q1, xmax = q3),
-    width = 0.2
-  ) +
-  scale_color_manual(
-    values = c(
-      "Very old donor -> Very young recipient" = "#2e15d1",
-      "Very old donor -> Young recipient" = "#2e15d1",
-      "Very young donor -> Very young recipient" = "#15D12E",
-      "Very young donor -> Young recipient" = "#15D12E",
-      "Very old donor -> Very old recipient" = "#d12e15",
-      "Very old donor -> Old recipient" = "#d12e15"
-    ),
-    breaks = c(
-      "Very old donor -> Very young recipient",
-      "Very young donor -> Very young recipient",
-      "Very old donor -> Very old recipient"
-    ),
-    labels = c(
-      "BB group",
-      "Positive control",
-      "Negative control"
-    )
-  ) +
-  labs(
-    x = "Graft survival (years)",
-    y = "",
-    title = "Graft survival - Median + IQR",
-    color = ""
-  ) +
-  theme_minimal()
-
-# Sauvegarde du graphique
-ggsave("graft_survival_forest_plot.png", width = 8, height = 6)
-
-
-#----- Etude survie patients selon les 3 groupes -----
-#créer un nouveau dataframe avec les groupes Bb group, pos et neg control
-comparison_data <- bind_rows(
-  BB_group       %>% mutate(Group = "BB group"),
-  pos_ctrl_group %>% mutate(Group = "Positive control"),
-  neg_ctrl_group %>% mutate(Group = "Negative control")
-)
-comparison_data <- comparison_data %>%
-  mutate(
-    Group = factor(
-      Group,
-      levels = c(
-        "BB group",
-        "Positive control",
-        "Negative control"
-      )
-    )
-  )
+#----- Etude survie greffons selon les 3 groupes -----
 
 # Kaplan Meier plot sur graft_surv_years
 km_fit_graft <- survfit(Surv(graft_surv_years, graft_event) ~ Group, data = comparison_data)
@@ -359,107 +197,381 @@ km_fit_graft_surv <- survfit(
 s5 <- summary(km_fit_graft_surv, times = 5)
 
 graft_survival_5yrs_df <- data.frame(
-  Group = gsub("Group=", "", s5$strata),
+  Group                     = gsub("Group=", "", s5$strata),
   Survival_Probability_5yrs = s5$surv,
-  lower = s5$lower,
-  upper = s5$upper
+  lower                     = s5$lower,
+  upper                     = s5$upper
 )
 
-# Optionnel mais recommandé
 graft_survival_5yrs_df$Group <- factor(
   graft_survival_5yrs_df$Group,
   levels = c("BB group", "Positive control", "Negative control")
 )
 
+# ---- Log-rank global ----
 logrank <- survdiff(
   Surv(graft_surv_years, graft_event) ~ Group,
   data = comparison_data
 )
+pval_global <- pchisq(logrank$chisq,
+                      df = length(logrank$n) - 1,
+                      lower.tail = FALSE)
 
-pval <- pchisq(logrank$chisq,
-               df = length(logrank$n) - 1,
-               lower.tail = FALSE)
+format_pval <- function(p) {
+  if (p < 0.0001) return("p < 0.0001")
+  if (p < 0.001)  return("p < 0.001")
+  if (p < 0.01)   return("p < 0.01")
+  if (p < 0.05)   return("p < 0.05")
+  return(paste0("p = ", round(p, 3)))
+}
 
-# Création du barchart avec ggplot2
-ggplot(
+pval_label <- paste0("Log-rank ", format_pval(pval_global))
+
+# ---- Comparaisons pairwise ----
+pw <- pairwise_survdiff(
+  Surv(graft_surv_years, graft_event) ~ Group,
+  data            = comparison_data,
+  p.adjust.method = "bonferroni"
+)
+pw_matrix <- pw$p.value
+
+get_pw_pval <- function(mat, g1, g2) {
+  v <- tryCatch(mat[g2, g1], error = function(e) NA)
+  if (is.na(v)) v <- tryCatch(mat[g1, g2], error = function(e) NA)
+  v
+}
+
+p_bb_pos  <- get_pw_pval(pw_matrix, "BB group", "Positive control")
+p_bb_neg  <- get_pw_pval(pw_matrix, "BB group", "Negative control")
+p_pos_neg <- get_pw_pval(pw_matrix, "Positive control", "Negative control")
+
+label_pval_only <- function(p) {
+  if (is.na(p) || p >= 0.05) return(NULL)
+  if (p < 0.0001) return("p < 0.0001")
+  if (p < 0.001)  return("p < 0.001")
+  if (p < 0.01)   return("p < 0.01")
+  return("p < 0.05")
+}
+
+label_bb_pos  <- label_pval_only(p_bb_pos)
+label_bb_neg  <- label_pval_only(p_bb_neg)
+label_pos_neg <- label_pval_only(p_pos_neg)
+
+# ---- Labels axe X avec % en dessous ----
+pct_df <- graft_survival_5yrs_df %>%
+  arrange(Group) %>%
+  mutate(axis_label = paste0(as.character(Group), "\n",
+                             scales::percent(Survival_Probability_5yrs, accuracy = 0.1)))
+
+label_map <- setNames(pct_df$axis_label, as.character(pct_df$Group))
+
+graft_survival_5yrs_df$Group_label <- factor(
+  label_map[as.character(graft_survival_5yrs_df$Group)],
+  levels = label_map[levels(graft_survival_5yrs_df$Group)]
+)
+
+# ---- Couleurs ----
+group_colors <- c(
+  "BB group"         = "#2166AC",
+  "Positive control" = "#4DAC26",
+  "Negative control" = "#D01C1C"
+)
+names(group_colors) <- label_map[names(group_colors)]
+
+# ---- Graphique de base ----
+p <- ggplot(
   graft_survival_5yrs_df,
-  aes(x = Group, y = Survival_Probability_5yrs, fill = Group)
+  aes(x = Group_label, y = Survival_Probability_5yrs, fill = Group_label)
 ) +
-  geom_col(width = 0.6) +
+  geom_col(width = 0.50, color = "white", linewidth = 0.4) +
+  
   geom_errorbar(
     aes(ymin = lower, ymax = upper),
-    width = 0.15
+    width     = 0.10,
+    linewidth = 0.75,
+    color     = "grey25"
   ) +
-  scale_fill_manual(
-    values = c(
-      "BB group" = "#2e15d1",
-      "Positive control" = "#15D12E",
-      "Negative control" = "#d12e15"
-    )
+  
+  scale_fill_manual(values = group_colors) +
+  
+  scale_y_continuous(
+    limits = c(0, 1.35),                        # espace suffisant tout en haut
+    breaks = seq(0, 1, by = 0.25),
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0)
   ) +
+  
+  # P-value globale tout en haut, bien séparée
   annotate(
     "text",
-    x = 2,
-    y = max(graft_survival_5yrs_df$upper) + 0.05,
-    label = paste0("Log-rank p = ", signif(pval, 10))
+    x        = 2,
+    y        = 1.30,
+    label    = pval_label,
+    size     = 3.8,
+    color    = "grey30",
+    fontface = "italic"
   ) +
+  
   labs(
-    x = "Group",
-    y = "Graft survival probability at 5 years",
-    title = "Graft survival probability at 5 years"
+    title    = "Graft survival probability at 5 years",
+    subtitle = "Kaplan-Meier estimate · Pairwise log-rank with Bonferroni correction",
+    x        = NULL,
+    y        = "Survival probability at 5 years",
+    fill     = NULL
   ) +
-  theme_minimal()
+  
+  theme_classic(base_size = 13) +
+  theme(
+    plot.title         = element_text(face = "bold", size = 14, hjust = 0.5, color = "grey10"),
+    plot.subtitle      = element_text(size = 10, hjust = 0.5, color = "grey40", margin = margin(b = 12)),
+    axis.text.x        = element_text(size = 11, color = "grey15", lineheight = 1.4),
+    axis.text.y        = element_text(size = 11, color = "grey30"),
+    axis.title.y       = element_text(size = 12, margin = margin(r = 10), color = "grey20"),
+    axis.line          = element_line(color = "grey60", linewidth = 0.5),
+    axis.ticks         = element_line(color = "grey60"),
+    legend.position    = "none",
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.4),
+    panel.grid.minor   = element_blank(),
+    plot.background    = element_rect(fill = "white", color = NA),
+    plot.margin        = margin(15, 20, 10, 15)
+  )
+
+# ---- Brackets pairwise conditionnels ----
+# Niveaux d'hauteur bien séparés :
+#   bracket adjacent (bb_pos ou pos_neg) : 1.03
+#   bracket large (bb_neg)               : 1.14
+#   log-rank global                      : 1.30
+
+if (!is.null(label_bb_pos)) {
+  p <- p + geom_signif(
+    comparisons = list(c(label_map["BB group"], label_map["Positive control"])),
+    annotations = label_bb_pos,
+    y_position  = 1.03,
+    tip_length  = 0.01,
+    textsize    = 3.5,
+    vjust       = -0.2,
+    color       = "grey20"
+  )
+}
+
+if (!is.null(label_pos_neg)) {
+  p <- p + geom_signif(
+    comparisons = list(c(label_map["Positive control"], label_map["Negative control"])),
+    annotations = label_pos_neg,
+    y_position  = 1.03,
+    tip_length  = 0.01,
+    textsize    = 3.5,
+    vjust       = -0.2,
+    color       = "grey20"
+  )
+}
+
+if (!is.null(label_bb_neg)) {
+  p <- p + geom_signif(
+    comparisons = list(c(label_map["BB group"], label_map["Negative control"])),
+    annotations = label_bb_neg,
+    y_position  = 1.14,           # toujours AU-DESSUS des brackets adjacents
+    tip_length  = 0.01,
+    textsize    = 3.5,
+    vjust       = -0.2,
+    color       = "grey20"
+  )
+}
+
+print(p)
 
 # Sauvegarde du graphique
 ggsave("graft_survival_5yrs_barchart.png", width = 8, height = 6)
 
+
+
 #----- Barchart probabilité de survie des greffons dans les 3 groupes à 10 ans -----
 s10 <- summary(km_fit_graft_surv, times = 10)
+
 graft_survival_10yrs_df <- data.frame(
-  Group = gsub("Group=", "", s10$strata),
+  Group                     = gsub("Group=", "", s10$strata),
   Survival_Probability_10yrs = s10$surv,
-  lower = s10$lower,
-  upper = s10$upper
+  lower                     = s10$lower,
+  upper                     = s10$upper
 )
-# Optionnel mais recommandé
+
 graft_survival_10yrs_df$Group <- factor(
   graft_survival_10yrs_df$Group,
-  levels = c("BB group", "Positive control", "Negative control"),
-  labels = c("BB group", "Positive control", "Negative control"),
-  ordered = TRUE,
-  levels = c("BB group", "Positive control", "Negative control"),
-  exclude = NULL
+  levels = c("BB group", "Positive control", "Negative control")
 )
-logrank_10yrs <- survdiff(
+
+# ---- Log-rank global ----
+logrank <- survdiff(
   Surv(graft_surv_years, graft_event) ~ Group,
   data = comparison_data
 )
-pval_10yrs <- pchisq(logrank_10yrs$chisq,
-                        df = length(logrank_10yrs$n) - 1,
-                        lower.tail = FALSE)
-# Création du barchart avec ggplot2
-ggplot(
+pval_global <- pchisq(logrank$chisq,
+                      df = length(logrank$n) - 1,
+                      lower.tail = FALSE)
+
+format_pval <- function(p) {
+  if (p < 0.0001) return("p < 0.0001")
+  if (p < 0.001)  return("p < 0.001")
+  if (p < 0.01)   return("p < 0.01")
+  if (p < 0.05)   return("p < 0.05")
+  return(paste0("p = ", round(p, 3)))
+}
+
+pval_label <- paste0("Log-rank ", format_pval(pval_global))
+
+# ---- Comparaisons pairwise ----
+pw <- pairwise_survdiff(
+  Surv(graft_surv_years, graft_event) ~ Group,
+  data            = comparison_data,
+  p.adjust.method = "bonferroni"
+)
+pw_matrix <- pw$p.value
+
+get_pw_pval <- function(mat, g1, g2) {
+  v <- tryCatch(mat[g2, g1], error = function(e) NA)
+  if (is.na(v)) v <- tryCatch(mat[g1, g2], error = function(e) NA)
+  v
+}
+
+p_bb_pos  <- get_pw_pval(pw_matrix, "BB group", "Positive control")
+p_bb_neg  <- get_pw_pval(pw_matrix, "BB group", "Negative control")
+p_pos_neg <- get_pw_pval(pw_matrix, "Positive control", "Negative control")
+
+label_pval_only <- function(p) {
+  if (is.na(p) || p >= 0.05) return(NULL)
+  if (p < 0.0001) return("p < 0.0001")
+  if (p < 0.001)  return("p < 0.001")
+  if (p < 0.01)   return("p < 0.01")
+  return("p < 0.05")
+}
+
+label_bb_pos  <- label_pval_only(p_bb_pos)
+label_bb_neg  <- label_pval_only(p_bb_neg)
+label_pos_neg <- label_pval_only(p_pos_neg)
+
+# ---- Labels axe X avec % en dessous ----
+pct_df <- graft_survival_10yrs_df %>%
+  arrange(Group) %>%
+  mutate(axis_label = paste0(as.character(Group), "\n",
+                             scales::percent(Survival_Probability_10yrs, accuracy = 0.1)))
+
+label_map <- setNames(pct_df$axis_label, as.character(pct_df$Group))
+
+graft_survival_10yrs_df$Group_label <- factor(
+  label_map[as.character(graft_survival_10yrs_df$Group)],
+  levels = label_map[levels(graft_survival_10yrs_df$Group)]
+)
+
+# ---- Couleurs ----
+group_colors <- c(
+  "BB group"         = "#2166AC",
+  "Positive control" = "#4DAC26",
+  "Negative control" = "#D01C1C"
+)
+names(group_colors) <- label_map[names(group_colors)]
+
+# ---- Graphique de base ----
+p <- ggplot(
   graft_survival_10yrs_df,
-  aes(x = Group, y = Survival_Probability_10yrs, fill = Group)) +
-  geom_col(width = 0.6) + 
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.15) +
-  scale_fill_manual(values = c(
-    "BB group" = "#2e15d1",
-    "Positive control" = "#15D12E",
-    "Negative control" = "#d12e15"
-  )) +
+  aes(x = Group_label, y = Survival_Probability_10yrs, fill = Group_label)
+) +
+  geom_col(width = 0.50, color = "white", linewidth = 0.4) +
+  
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper),
+    width     = 0.10,
+    linewidth = 0.75,
+    color     = "grey25"
+  ) +
+  
+  scale_fill_manual(values = group_colors) +
+  
+  scale_y_continuous(
+    limits = c(0, 1.35),                        # espace suffisant tout en haut
+    breaks = seq(0, 1, by = 0.25),
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0)
+  ) +
+  
+  # P-value globale tout en haut, bien séparée
   annotate(
     "text",
-    x = 2,
-    y = max(graft_survival_10yrs_df$upper) + 0.05,
-    label = paste0("Log-rank p = ", signif(pval_10yrs, 10))
+    x        = 2,
+    y        = 1.30,
+    label    = pval_label,
+    size     = 3.8,
+    color    = "grey30",
+    fontface = "italic"
   ) +
+  
   labs(
-    x = "Group",
-    y = "Graft survival probability at 10 years",
-    title = "Graft survival probability at 10 years"
+    title    = "Graft survival probability at 10 years",
+    subtitle = "Kaplan-Meier estimate · Pairwise log-rank with Bonferroni correction",
+    x        = NULL,
+    y        = "Survival probability at 10 years",
+    fill     = NULL
   ) +
-  theme_minimal()
+  
+  theme_classic(base_size = 13) +
+  theme(
+    plot.title         = element_text(face = "bold", size = 14, hjust = 0.5, color = "grey10"),
+    plot.subtitle      = element_text(size = 10, hjust = 0.5, color = "grey40", margin = margin(b = 12)),
+    axis.text.x        = element_text(size = 11, color = "grey15", lineheight = 1.4),
+    axis.text.y        = element_text(size = 11, color = "grey30"),
+    axis.title.y       = element_text(size = 12, margin = margin(r = 10), color = "grey20"),
+    axis.line          = element_line(color = "grey60", linewidth = 0.5),
+    axis.ticks         = element_line(color = "grey60"),
+    legend.position    = "none",
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.4),
+    panel.grid.minor   = element_blank(),
+    plot.background    = element_rect(fill = "white", color = NA),
+    plot.margin        = margin(15, 20, 10, 15)
+  )
+
+# ---- Brackets pairwise conditionnels ----
+# Niveaux d'hauteur bien séparés :
+#   bracket adjacent (bb_pos ou pos_neg) : 1.03
+#   bracket large (bb_neg)               : 1.14
+#   log-rank global                      : 1.30
+
+if (!is.null(label_bb_pos)) {
+  p <- p + geom_signif(
+    comparisons = list(c(label_map["BB group"], label_map["Positive control"])),
+    annotations = label_bb_pos,
+    y_position  = 1.03,
+    tip_length  = 0.01,
+    textsize    = 3.5,
+    vjust       = -0.2,
+    color       = "grey20"
+  )
+}
+
+if (!is.null(label_pos_neg)) {
+  p <- p + geom_signif(
+    comparisons = list(c(label_map["Positive control"], label_map["Negative control"])),
+    annotations = label_pos_neg,
+    y_position  = 1.03,
+    tip_length  = 0.01,
+    textsize    = 3.5,
+    vjust       = -0.2,
+    color       = "grey20"
+  )
+}
+
+if (!is.null(label_bb_neg)) {
+  p <- p + geom_signif(
+    comparisons = list(c(label_map["BB group"], label_map["Negative control"])),
+    annotations = label_bb_neg,
+    y_position  = 1.14,           # toujours AU-DESSUS des brackets adjacents
+    tip_length  = 0.01,
+    textsize    = 3.5,
+    vjust       = -0.2,
+    color       = "grey20"
+  )
+}
+
+print(p)
+
 # Sauvegarde du graphique
 ggsave("graft_survival_10yrs_barchart.png", width = 8, height = 6)
 

@@ -8,20 +8,23 @@ library(forcats)
 library(forestplot)
 library(ggplot2)
 library(ggpubr)
+library(ggsignif)
 library(gtsummary)
 library(gt)
 library(haven)
+library(janitor)
 library(lubridate)
 library(paletteer)
 library(purrr)
 library(readxl)
+library(scales)
 library(splines)
 library(stringr)
 library(survival)
 library(survminer)
 library(tibble)
 library(tidyr)
-library(janitor)
+library(writexl)
 
 #----- Importation du dataset -----
 
@@ -91,7 +94,7 @@ data_CHB_BBE <- data_CHB_BBE %>%
 #----- Sélection et mise en forme des données -----
 
 data_CHB_BBE <- data_CHB_BBE %>%
-  select(tx_id, rec_tx_dt, tfl_lastupdate, rec_age_at_tx, don_age, graft_surv_days, tfl_graft_status_x,
+  select(tx_id, nom, prenom, rec_tx_dt, tfl_lastupdate, rec_age_at_tx, don_age, graft_surv_days, tfl_graft_status_x,
          graft_failure, rec_gender, rec_birth_dt, mult_tx, rec_hgt_cm, rec_wgt_kg, bmi, graft_cumulated_age,
     don_gender, don_hgt_cm, don_wgt_kg, don_cod, biopsy_dt, biopsy_number, subnormal, steatosis, steatose_q, fibrosis, 
     cirrhosis, ductopenia, ducto_count, endothelitis, steatofibrosis, hnr, mvo, hep_art_thrombosis, normal_liver_function,
@@ -227,7 +230,7 @@ data_CHB_BBE <- data_CHB_BBE %>%
   mutate(graft_surv_years = graft_surv_days / 365.25)
 
 #Nouvelle variable graft_event à partir de tfl_graft_status
-# graft_event = 1 si tfl_graft_status = DCD ou ARF, graft_event = 0 si tfl_graft_status = GRF
+# graft_event = 1 si tfl_graft_status = DCD ou ARF (= reTH), graft_event = 0 si tfl_graft_status = GRF
 data_CHB_BBE <- data_CHB_BBE %>%
   mutate(graft_event = case_when(
     tfl_graft_status_x %in% c("DCD", "ARF") ~ 1,
@@ -235,8 +238,24 @@ data_CHB_BBE <- data_CHB_BBE %>%
     TRUE ~ NA_real_
   ))
 
+#Renommer la variable bmi en rec_bmi
+data_CHB_BBE <- data_CHB_BBE %>%
+  rename(rec_bmi = bmi)
+
+
+#Créer une variable don_bmi à partir de don_wgt_kg et don_hgt_cm
+data_CHB_BBE <- data_CHB_BBE %>%
+  mutate(don_bmi = don_wgt_kg / (don_hgt_cm / 100)^2)
+data_CHB_BBE <- data_CHB_BBE %>%
+  mutate(don_bmi = round(don_bmi, 1))
+
 #----- Sauvegarde du dataset final ------
 save(data_CHB_BBE, file = "data_CHB_BBE.RData")
+
+
+
+
+#####----- Figures descriptives de la population globale en fonction de l'âge -----#####
 
 #Tableau des groupes d'âge des donneurs et des receveurs en nombre et pourcentage
 table_age_groups <- data_CHB_BBE %>%
@@ -345,6 +364,169 @@ ggplot(data_CHB_BBE, aes(x = tx_period, fill = rec_age_grp)) +
   ) +
   theme_minimal()
 ggsave("recipient_age_by_period_percentage.png", width = 10, height = 6)
+
+
+#----- Création des 3 groupes d'intérêt -----
+
+# Groupe BB contient les very old donor ayant donné aux very young recipient et young recipient
+BB_group <- data_CHB_BBE %>%
+  filter((don_age >= 70 & rec_age_at_tx < 20) | (don_age >= 70 & rec_age_at_tx >= 20 & rec_age_at_tx < 40))
+BB_group1 <- data_CHB_BBE %>%
+  filter(don_age >= 70 & rec_age_at_tx < 20)
+BB_group2 <- data_CHB_BBE %>%
+  filter(don_age >= 70 & rec_age_at_tx >= 20 & rec_age_at_tx < 40)
+
+# Groupe contrôle positif contient les very young donor ayant donné aux very young recipient et young recipient
+pos_ctrl_group <- data_CHB_BBE %>%
+  filter((don_age < 20 & rec_age_at_tx < 20) | (don_age < 20 & rec_age_at_tx >= 20 & rec_age_at_tx < 40))
+pos_ctrl_group1 <- data_CHB_BBE %>%
+  filter(don_age < 20 & rec_age_at_tx < 20)
+pos_ctrl_group2 <- data_CHB_BBE %>%
+  filter(don_age < 20 & rec_age_at_tx >= 20 & rec_age_at_tx < 40)
+
+# Groupe contrôle négatif contient les very old donor ayant donné aux very old recipient et old recipient
+neg_ctrl_group <- data_CHB_BBE %>%
+  filter((don_age >= 70 & rec_age_at_tx >= 70) | (don_age >= 70 & rec_age_at_tx >= 60 & rec_age_at_tx < 70))
+neg_ctrl_group1 <- data_CHB_BBE %>%
+  filter(don_age >= 70 & rec_age_at_tx >= 70)
+neg_ctrl_group2 <- data_CHB_BBE %>%
+  filter(don_age >= 70 & rec_age_at_tx >= 60 & rec_age_at_tx < 70)
+
+#----- Table 1 de nos groupes d'intérêt -----
+#Faire un tableau descriptif des variables rec_age_at_tx, don_age, rec_gender, don_gender, don_cod, rec_hgt_cm, 
+#rec_wgt_kg, don_hgt_cm, don_wgt_kg
+#sur l'effectif total et les trois groupes d'intérêt BB group, Negative control et Positive control avec une
+#comparaison entre les 3 groupes et une pvalue sur la colonnes la plus à droite
+
+table1 <- bind_rows(
+  BB_group       %>% mutate(Group = "BB group"),
+  pos_ctrl_group %>% mutate(Group = "Positive control"),
+  neg_ctrl_group %>% mutate(Group = "Negative control"),
+  data_CHB_BBE %>% mutate(Group = "All patients")
+) %>%
+  mutate(
+    Group = factor(
+      Group,
+      levels = c(
+        "BB group",
+        "Positive control",
+        "Negative control",
+        "All patients"
+      )
+    )
+  ) %>%
+  select(
+    Group,
+    rec_age_at_tx, don_age, rec_gender, don_gender, don_cod, rec_bmi, don_bmi) %>%
+  tbl_summary(
+    by = Group,
+    missing = "no",
+    statistic = list(
+      all_continuous() ~ "{median}",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = all_continuous() ~ 0,
+    label = list(
+      rec_age_at_tx ~ "Recipient age at transplant",
+      rec_gender ~ "Recipient gender",
+      rec_bmi ~ "Recipient BMI",
+      don_age ~ "Donor age",
+      don_gender ~ "Donor gender",
+      don_bmi ~ "Donor BMI",
+      don_cod ~ "Cause of donor death"
+    )
+  ) %>%
+  add_p() %>%
+  modify_header(label = "**Variable**") %>%
+  modify_spanning_header(
+    all_stat_cols() ~ "**Group**"
+  )
+# Affichage du tableau
+table1_gt <- as_gt(table1)
+print(table1_gt)
+
+
+##### Création base comparison_data_subgroup contenant les 3 groupes divisés en 2 sous-groupes #####
+comparison_data_subgroup <- bind_rows(
+  BB_group1       %>% mutate(Group = "Very old donor -> Very young recipient"),
+  BB_group2       %>% mutate(Group = "Very old donor -> Young recipient"),
+  pos_ctrl_group1 %>% mutate(Group = "Very young donor -> Very young recipient"),
+  pos_ctrl_group2 %>% mutate(Group = "Very young donor -> Young recipient"),
+  neg_ctrl_group1 %>% mutate(Group = "Very old donor -> Very old recipient"),
+  neg_ctrl_group2 %>% mutate(Group = "Very old donor -> Old recipient")
+)
+
+
+# Calcul médiane et quartiles des durées graft_surv_years pour les 6 groupes
+summary_df <- comparison_data_subgroup %>%
+  group_by(Group) %>%
+  summarise(
+    median = median(graft_surv_years, na.rm = TRUE),
+    q1     = quantile(graft_surv_years, 0.25, na.rm = TRUE),
+    q3     = quantile(graft_surv_years, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+summary_df$Group <- factor(
+  summary_df$Group,
+  levels = c("Very young donor -> Young recipient", "Very young donor -> Very young recipient", "Very old donor -> Old recipient", "Very old donor -> Very old recipient", "Very old donor -> Young recipient", "Very old donor -> Very young recipient")
+)
+
+# Forest plot
+ggplot(summary_df, aes(x = median, y = Group, color = Group)) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(xmin = q1, xmax = q3),
+    width = 0.2
+  ) +
+  scale_color_manual(
+    values = c(
+      "Very old donor -> Very young recipient" = "#2e15d1",
+      "Very old donor -> Young recipient" = "#2e15d1",
+      "Very young donor -> Very young recipient" = "#15D12E",
+      "Very young donor -> Young recipient" = "#15D12E",
+      "Very old donor -> Very old recipient" = "#d12e15",
+      "Very old donor -> Old recipient" = "#d12e15"
+    ),
+    breaks = c(
+      "Very old donor -> Very young recipient",
+      "Very young donor -> Very young recipient",
+      "Very old donor -> Very old recipient"
+    ),
+    labels = c(
+      "BB group",
+      "Positive control",
+      "Negative control"
+    )
+  ) +
+  labs(
+    x = "Graft survival (years)",
+    y = "",
+    title = "Graft survival - Median + IQR",
+    color = ""
+  ) +
+  theme_minimal()
+
+# Sauvegarde du graphique
+ggsave("graft_survival_forest_plot.png", width = 8, height = 6)
+
+
+#####----- Créer un nouveau dataframe avec les groupes Bb group, pos et neg control -----#####
+comparison_data <- bind_rows(
+  BB_group       %>% mutate(Group = "BB group"),
+  pos_ctrl_group %>% mutate(Group = "Positive control"),
+  neg_ctrl_group %>% mutate(Group = "Negative control")
+)
+comparison_data <- comparison_data %>%
+  mutate(
+    Group = factor(
+      Group,
+      levels = c(
+        "BB group",
+        "Positive control",
+        "Negative control"
+      )
+    )
+  )
 
 
 # ----- Fin du script -----
